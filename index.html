@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Training Room Reservation</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React and ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <!-- Babel for JSX -->
+  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <!-- Flatpickr -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <!-- FullCalendar -->
+  <link href="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.5/main.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@5.11.5/main.min.js"></script>
+  <style>
+    .tooltip {
+      position: absolute;
+      background: #333;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      z-index: 1000;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    // Color mapping for places
+    const placeColors = {
+      "Training Room 1": "bg-blue-500",
+      "Training Room 2": "bg-green-500",
+      "Training Room 3": "bg-yellow-500",
+      "Table Office Building 2": "bg-purple-500"
+    };
+
+    // Google Apps Script URL (replace with your GAS URL)
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbw1GQ9O1eo-pKszDUmOMk9Y4qzrqvNJ2UDbqOJ7hV96qfycOTL4kEcr3r36oywMDLrh/exec';
+
+    // Local storage for temporary data
+    const localReservations = JSON.parse(localStorage.getItem('reservations') || '[]');
+
+    // Fetch reservations
+    const fetchReservations = async () => {
+      return localReservations;
+    };
+
+    // Write reservation to Google Apps Script
+    const writeReservation = async (reservation) => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reservation)
+        });
+        if (response.ok) {
+          localReservations.push(reservation);
+          localStorage.setItem('reservations', JSON.stringify(localReservations));
+          alert('Reservation saved!');
+        } else {
+          console.error('Failed to save reservation');
+        }
+      } catch (error) {
+        console.error('Error writing reservation:', error);
+        localReservations.push(reservation);
+        localStorage.setItem('reservations', JSON.stringify(localReservations));
+        alert('Reservation saved locally (integration pending)');
+      }
+    };
+
+    // Update reservation in local storage and attempt GAS sync
+    const updateReservation = async (index, updatedReservation) => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...updatedReservation, action: 'update', index })
+        });
+        if (response.ok) {
+          localReservations[index] = updatedReservation;
+          localStorage.setItem('reservations', JSON.stringify(localReservations));
+          alert('Reservation updated!');
+        } else {
+          console.error('Failed to update reservation');
+        }
+      } catch (error) {
+        console.error('Error updating reservation:', error);
+        localReservations[index] = updatedReservation;
+        localStorage.setItem('reservations', JSON.stringify(localReservations));
+        alert('Reservation updated locally (integration pending)');
+      }
+    };
+
+    // Delete reservation
+    const deleteReservation = async (index) => {
+      try {
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'delete', index })
+        });
+        if (response.ok) {
+          localReservations.splice(index, 1);
+          localStorage.setItem('reservations', JSON.stringify(localReservations));
+          alert('Reservation deleted!');
+        } else {
+          console.error('Failed to delete reservation');
+        }
+      } catch (error) {
+        console.error('Error deleting reservation:', error);
+        localReservations.splice(index, 1);
+        localStorage.setItem('reservations', JSON.stringify(localReservations));
+        alert('Reservation deleted locally (integration pending)');
+      }
+    };
+
+    // React Components
+    const ReservePage = () => {
+      const [title, setTitle] = React.useState('');
+      const [place, setPlace] = React.useState('Training Room 1');
+      const [dateRange, setDateRange] = React.useState('');
+      const [startHour, setStartHour] = React.useState('');
+      const [startMinute, setStartMinute] = React.useState('');
+      const [endHour, setEndHour] = React.useState('');
+      const [endMinute, setEndMinute] = React.useState('');
+      const [reserveBy, setReserveBy] = React.useState('');
+
+      React.useEffect(() => {
+        flatpickr("#dateRange", {
+          mode: "range",
+          dateFormat: "Y-m-d",
+          minDate: "today",
+          onChange: (selectedDates) => {
+            if (selectedDates.length === 2) {
+              setDateRange(`${selectedDates[0].toISOString().split('T')[0]} to ${selectedDates[1].toISOString().split('T')[0]}`);
+            }
+          }
+        });
+      }, []);
+
+      const submitReservation = () => {
+        const [startDate, endDate] = dateRange.split(' to ');
+        const newReservation = {
+          title, place, startDate, endDate,
+          startTime: `${startHour}:${startMinute}`, endTime: `${endHour}:${endMinute}`, reserveBy
+        };
+        writeReservation(newReservation);
+        setTitle(''); setPlace('Training Room 1'); setDateRange('');
+        setStartHour(''); setStartMinute(''); setEndHour(''); setEndMinute(''); setReserveBy('');
+      };
+
+      return (
+        <div className="p-6 max-w-lg mx-auto">
+          <h1 className="text-2xl font-bold mb-4 text-center">Reserve a Training Room</h1>
+          <p className="text-red-500 text-center mb-4">Note: Data will be saved once the integration is complete.</p>
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Title</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} type="text" className="w-full p-2 border rounded" placeholder="Enter title" />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Place</label>
+              <select value={place} onChange={e => setPlace(e.target.value)} className="w-full p-2 border rounded">
+                <option value="Training Room 1">Training Room 1</option>
+                <option value="Training Room 2">Training Room 2</option>
+                <option value="Training Room 3">Training Room 3</option>
+                <option value="Table Office Building 2">Table Office Building 2</option>
+              </select>
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Date Range</label>
+              <input id="dateRange" value={dateRange} readOnly className="w-full p-2 border rounded" placeholder="Select date range" />
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Start Time</label>
+              <div className="flex space-x-2">
+                <select value={startHour} onChange={e => setStartHour(e.target.value)} className="w-1/2 p-2 border rounded">
+                  <option value="">HH</option>{[...Array(24).keys()].map(i => <option key={i} value={i.toString().padStart(2, '0')}>{i.toString().padStart(2, '0')}</option>)}
+                </select>
+                <select value={startMinute} onChange={e => setStartMinute(e.target.value)} className="w-1/2 p-2 border rounded">
+                  <option value="">MM</option>{[...Array(12).keys()].map(i => <option key={i * 5} value={(i * 5).toString().padStart(2, '0')}>{(i * 5).toString().padStart(2, '0')}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">End Time</label>
+              <div className="flex space-x-2">
+                <select value={endHour} onChange={e => setEndHour(e.target.value)} className="w-1/2 p-2 border rounded">
+                  <option value="">HH</option>{[...Array(24).keys()].map(i => <option key={i} value={i.toString().padStart(2, '0')}>{i.toString().padStart(2, '0')}</option>)}
+                </select>
+                <select value={endMinute} onChange={e => setEndMinute(e.target.value)} className="w-1/2 p-2 border rounded">
+                  <option value="">MM</option>{[...Array(12).keys()].map(i => <option key={i * 5} value={(i * 5).toString().padStart(2, '0')}>{(i * 5).toString().padStart(2, '0')}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-2">Reserve By</label>
+              <input value={reserveBy} onChange={e => setReserveBy(e.target.value)} type="text" className="w-full p-2 border rounded" placeholder="Enter your name" />
+            </div>
+            <button onClick={submitReservation} className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Reserve</button>
+          </div>
+        </div>
+      );
+    };
+
+    const ResultsPage = () => {
+      const [reservations, setReservations] = React.useState([]);
+      const [editingIndex, setEditingIndex] = React.useState(null);
+      const [editForm, setEditForm] = React.useState(null);
+
+      React.useEffect(() => {
+        const loadData = async () => {
+          const data = await fetchReservations();
+          const today = new Date();
+          const filtered = data.filter(r => new Date(r.endDate) >= today);
+          setReservations(filtered);
+        };
+        loadData();
+      }, []);
+
+      const handleEdit = (index, reservation) => {
+        setEditingIndex(index);
+        setEditForm({ ...reservation, dateRange: `${reservation.startDate} to ${reservation.endDate}` });
+      };
+
+      const handleEditSubmit = () => {
+        const [startDate, endDate] = editForm.dateRange.split(' to ');
+        const updatedReservation = {
+          title: editForm.title,
+          place: editForm.place,
+          startDate,
+          endDate,
+          startTime: editForm.startTime,
+          endTime: editForm.endTime,
+          reserveBy: editForm.reserveBy
+        };
+        updateReservation(editingIndex, updatedReservation);
+        setReservations(reservations.map((r, i) => (i === editingIndex ? updatedReservation : r)));
+        setEditingIndex(null);
+        setEditForm(null);
+      };
+
+      const handleDelete = (index) => {
+        if (window.confirm('Are you sure you want to delete this reservation?')) {
+          deleteReservation(index);
+          setReservations(reservations.filter((_, i) => i !== index));
+        }
+      };
+
+      return (
+        <div className="p-6">
+          <h1 className="text-2xl font-bold mb-4 text-center">Reservation Results</h1>
+          <div className="space-y-4">
+            {Object.entries(_.groupBy(reservations, 'place')).map(([place, res]) => (
+              <div key={place} className={`p-4 rounded ${placeColors[place] || 'bg-gray-500'}`}>
+                <h2 className="text-xl font-semibold text-white">{place}</h2>
+                <ul className="mt-2 text-white">
+                  {res.map((r, i) => (
+                    <li key={i} className="flex justify-between items-center">
+                      <span>{r.title} - {r.startDate} to {r.endDate}, {r.startTime} to {r.endTime}, by {r.reserveBy}</span>
+                      <div className="space-x-2">
+                        <button onClick={() => handleEdit(reservations.indexOf(r), r)} className="text-blue-200 hover:text-blue-100">Edit</button>
+                        <button onClick={() => handleDelete(reservations.indexOf(r))} className="text-red-200 hover:text-red-100">Delete</button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          {editingIndex !== null && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+              <div className="bg-white p-6 rounded-lg shadow-md max-w-lg w-full">
+                <h2 className="text-xl font-bold mb-4">Edit Reservation</h2>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">Title</label>
+                  <input
+                    value={editForm.title}
+                    onChange={e => setEditForm({ ...editForm, title: e.target.value })}
+                    type="text"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">Place</label>
+                  <select
+                    value={editForm.place}
+                    onChange={e => setEditForm({ ...editForm, place: e.target.value })}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="Training Room 1">Training Room 1</option>
+                    <option value="Training Room 2">Training Room 2</option>
+                    <option value="Training Room 3">Training Room 3</option>
+                    <option value="Table Office Building 2">Table Office Building 2</option>
+                  </select>
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">Date Range</label>
+                  <input
+                    value={editForm.dateRange}
+                    onChange={e => setEditForm({ ...editForm, dateRange: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    placeholder="YYYY-MM-DD to YYYY-MM-DD"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">Start Time</label>
+                  <input
+                    value={editForm.startTime}
+                    onChange={e => setEditForm({ ...editForm, startTime: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    placeholder="HH:MM"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">End Time</label>
+                  <input
+                    value={editForm.endTime}
+                    onChange={e => setEditForm({ ...editForm, endTime: e.target.value })}
+                    className="w-full p-2 border rounded"
+                    placeholder="HH:MM"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block text-gray-700 mb-2">Reserve By</label>
+                  <input
+                    value={editForm.reserveBy}
+                    onChange={e => setEditForm({ ...editForm, reserveBy: e.target.value })}
+                    type="text"
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div className="flex space-x-2">
+                  <button onClick={handleEditSubmit} className="w-1/2 bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Save</button>
+                  <button onClick={() => { setEditingIndex(null); setEditForm(null); }} className="w-1/2 bg-gray-600 text-white p-2 rounded hover:bg-gray-700">Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    const CalendarPage = () => {
+      const calendarRef = React.useRef(null);
+
+      React.useEffect(() => {
+        const calendarEl = calendarRef.current;
+        const calendar = new FullCalendar.Calendar(calendarEl, {
+          initialView: 'dayGridMonth',
+          events: async () => {
+            const reservations = await fetchReservations();
+            return reservations.map(r => ({
+              title: r.title,
+              start: r.startDate,
+              end: r.endDate,
+              backgroundColor: placeColors[r.place] || '#666',
+              borderColor: placeColors[r.place] || '#666',
+              extendedProps: { startTime: r.startTime, endTime: r.endTime, reserveBy: r.reserveBy, place: r.place }
+            }));
+          },
+          eventDidMount: function(info) {
+            const tooltip = document.createElement('div');
+            tooltip.className = 'tooltip';
+            tooltip.innerHTML = `
+              <strong>${info.event.title}</strong><br>
+              Time: ${info.event.extendedProps.startTime} to ${info.event.extendedProps.endTime}<br>
+              Reserved By: ${info.event.extendedProps.reserveBy}<br>
+              Place: ${info.event.extendedProps.place}
+            `;
+            document.body.appendChild(tooltip);
+            tooltip.style.display = 'none';
+
+            info.el.addEventListener('mouseover', function(e) {
+              tooltip.style.display = 'block';
+              tooltip.style.left = e.pageX + 10 + 'px';
+              tooltip.style.top = e.pageY + 10 + 'px';
+            });
+
+            info.el.addEventListener('mousemove', function(e) {
+              tooltip.style.left = e.pageX + 10 + 'px';
+              tooltip.style.top = e.pageY + 10 + 'px';
+            });
+
+            info.el.addEventListener('mouseout', function() {
+              tooltip.style.display = 'none';
+            });
+          }
+        });
+        calendar.render();
+        return () => calendar.destroy();
+      }, []);
+
+      return (
+        <div className="p-6 max-w-4xl mx-auto">
+          <h1 className="text-2xl font-bold mb-4 text-center">Calendar View</h1>
+          <div ref={calendarRef}></div>
+        </div>
+      );
+    };
+
+    // App Component
+    const App = () => {
+      const [page, setPage] = React.useState('reserve');
+
+      const pages = {
+        reserve: <ReservePage />,
+        results: <ResultsPage />,
+        calendar: <CalendarPage />
+      };
+
+      return (
+        <div>
+          <nav className="bg-blue-600 text-white p-4">
+            <ul className="flex space-x-6 justify-center">
+              <li><button onClick={() => setPage('reserve')} className="hover:underline">Reserve</button></li>
+              <li><button onClick={() => setPage('results')} className="hover:underline">Show Results</button></li>
+              <li><button onClick={() => setPage('calendar')} className="hover:underline">Calendar View</button></li>
+            </ul>
+          </nav>
+          {pages[page]}
+        </div>
+      );
+    };
+
+    // Render the app
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+  <!-- Lodash for grouping -->
+  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js"></script>
+</body>
+</html>
